@@ -27,19 +27,19 @@ This is a Kernel application that integrates Google's Gemini 2.5 Computer Use mo
 4. Execute browser automation tasks through Stagehand's agent interface
 
 **Stagehand Configuration**
+- Uses Stagehand v3 with latest Kernel SDK
 - Runs in "LOCAL" env mode but connects to remote Kernel browser via CDP
 - Uses `localBrowserLaunchOptions.cdpUrl` to connect to `kernel.browsers.create()` CDP endpoint
 - Configured with 30-second DOM settle timeout for dynamic content
-- Uses GPT-4o for Stagehand operations and Gemini 2.5 for computer use agent tasks
+- Uses Gemini 2.5 computer use agent (mode: "cua"); no separate Stagehand/default model needed
 
 ## Environment Variables
 
 Required API keys (stored in `.env` file):
 - `KERNEL_API_KEY`: Kernel platform authentication
 - `GOOGLE_API_KEY`: Gemini 2.5 Computer Use model access
-- `OPENAI_API_KEY`: Stagehand's GPT-4o model access
 
-**Setup**: Copy `.env-example` to `.env` and populate all three keys.
+**Setup**: Copy `.env-example` to `.env` and populate both keys.
 
 ## Key Patterns
 
@@ -49,9 +49,9 @@ Required API keys (stored in `.env` file):
 - Live view URL available at `kernelBrowser.browser_live_view_url`
 
 ### Error Handling
-- All Stagehand operations wrapped in try/catch
+- All Stagehand operations wrapped in try/catch/finally
 - Returns `SearchQueryOutput` with success status and result message
-- Always closes Stagehand on both success and error paths
+- Cleanup (close Stagehand, delete browser) in `finally`
 
 ### Execution Detection
 - Uses `import.meta.url === \`file://${process.argv[1]}\`` to detect direct execution (ES modules)
@@ -63,7 +63,7 @@ Required API keys (stored in `.env` file):
 **Setup**:
 ```bash
 cp .env-example .env
-# Edit .env to add KERNEL_API_KEY, GOOGLE_API_KEY, OPENAI_API_KEY
+# Edit .env to add KERNEL_API_KEY, GOOGLE_API_KEY
 ```
 
 **Local Development**:

@@ -1,5 +1,5 @@
 import { Stagehand } from "@browserbasehq/stagehand";
-import client, { Kernel, type KernelContext } from '@onkernel/sdk';
+import { Kernel, type KernelContext } from '@onkernel/sdk';
 
 const kernel = new Kernel({
   apiKey: process.env.KERNEL_API_KEY
@@ -12,40 +12,20 @@ interface SearchQueryOutput {
   result: string;
 }
 
-// API Keys for LLM providers
-// - GOOGLE_API_KEY: Required for Gemini 2.5 Computer Use Agent
-// - OPENAI_API_KEY: Required for Stagehand's GPT-4o model
+// GOOGLE_API_KEY: Required for Gemini 2.5 Computer Use Agent
 // Set via environment variables or `kernel deploy <filename> --env-file .env`
-// See https://docs.onkernel.com/launch/deploy#environment-variables
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-if (!OPENAI_API_KEY) {
-  throw new Error('OPENAI_API_KEY is not set');
-}
 
 if (!GOOGLE_API_KEY) {
   throw new Error('GOOGLE_API_KEY is not set');
 }
 
 async function runStagehandTask(invocationId?: string): Promise<SearchQueryOutput> {
-  // Executes a Computer Use Agent (CUA) task using Gemini 2.5 and Stagehand
-  //
-  // This function supports dual execution modes:
-  // - Action Handler Mode: Called with invocation_id from Kernel app action context
-  // - Local Mode: Called without invocation_id for direct script execution
-  //
-  // Args:
-  //     invocationId: Optional Kernel invocation ID to associate browser with action
-  //
-  // App Actions Returns:
-  //     SearchQueryOutput: Success status and result message from the agent
-  // Local Execution Returns:
-  //     Logs the result of the agent execution
+  const VIEWPORT = { width: 1440, height: 900 };
 
   const browserOptions = invocationId
-    ? { invocation_id: invocationId, stealth: true }
-    : { stealth: true };
+    ? { invocation_id: invocationId, stealth: true, viewport_width: VIEWPORT.width, viewport_height: VIEWPORT.height }
+    : { stealth: true, viewport_width: VIEWPORT.width, viewport_height: VIEWPORT.height };
 
   const kernelBrowser = await kernel.browsers.create(browserOptions);
 
@@ -54,41 +34,33 @@ async function runStagehandTask(invocationId?: string): Promise<SearchQueryOutpu
   const stagehand = new Stagehand({
     env: "LOCAL",
     verbose: 1,
-    domSettleTimeoutMs: 30_000,
-    modelName: "gpt-4o",
-    modelClientOptions: {
-      apiKey: OPENAI_API_KEY
-    },
+    domSettleTimeout: 30_000,
     localBrowserLaunchOptions: {
-      cdpUrl: kernelBrowser.cdp_ws_url
+      cdpUrl: kernelBrowser.cdp_ws_url,
+      viewport: VIEWPORT
     }
   });
   await stagehand.init();
 
-  /////////////////////////////////////
-  // Your Stagehand implementation here
-  /////////////////////////////////////
   try {
-    const page = stagehand.page;
+    const page = stagehand.context.pages()[0];
+    if (!page) throw new Error("No page available");
 
-    const agent = stagehand.agent({
-      provider: "google",
-      model: "gemini-2.5-computer-use-preview-10-2025",
-      instructions: `You are a helpful assistant that can use a web browser.
-      You are currently on the following page: ${page.url()}.
-      Do not ask follow up questions, the user will trust your judgement.`,
-      options: {
-        apiKey: GOOGLE_API_KEY,
-      }
-    });
-
-    // Navigate to YCombinator's website
     await page.goto("https://www.ycombinator.com/companies");
 
-    // Define the instructions for the CUA agent
-    const instruction = "Find Kernel's company page on the YCombinator website and write a blog post about their product offering.";
+    const agent = stagehand.agent({
+      mode: "cua",
+      model: { 
+        modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+        apiKey: GOOGLE_API_KEY
+      },
+      systemPrompt: `You are a helpful assistant that can use a web browser.
+You are currently on the following page: ${page.url()}.
+Do not ask follow up questions, the user will trust your judgement.`,
+    });
 
-    // Execute the instruction
+    const instruction = "Search for 'Kernel' in the search box and then tell me the number of employees on the company page.";
+
     const result = await agent.execute({
       instruction,
       maxSteps: 20,
@@ -96,20 +68,17 @@ async function runStagehandTask(invocationId?: string): Promise<SearchQueryOutpu
 
     console.log("result: ", result);
 
-    console.log("Deleting browser and closing stagehand...");
-    await stagehand.close();
-    await kernel.browsers.deleteByID(kernelBrowser.session_id);
     return { success: true, result: result.message };
   } catch (error) {
     console.error(error);
+    return { success: false, result: "" };
+  } finally {
     console.log("Deleting browser and closing stagehand...");
     await stagehand.close();
     await kernel.browsers.deleteByID(kernelBrowser.session_id);
-    return { success: false, result: "" };
   }
 }
 
-// Register Kernel action handler for remote invocation
 // Invoked via: kernel invoke ts-stagehand-google-cua-agent google-cua-agent-task
 app.action<void, SearchQueryOutput>(
   'google-cua-agent-task',
@@ -118,7 +87,6 @@ app.action<void, SearchQueryOutput>(
   },
 );
 
-// Run locally if executed directly (not imported as a module)
 // Execute via: npx tsx index.ts
 if (import.meta.url === `file://${process.argv[1]}`) {
   runStagehandTask().then(result => {

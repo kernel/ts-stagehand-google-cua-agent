@@ -18,7 +18,6 @@ This app uses [Gemini 2.5's computer use model](https://blog.google/technology/g
 2. **Add your API keys to `.env`:**
    - `KERNEL_API_KEY` - Get from [Kernel dashboard](https://dashboard.onkernel.com/sign-in)
    - `GOOGLE_API_KEY` - Get from [Google AI Studio](https://aistudio.google.com/apikey)
-   - `OPENAI_API_KEY` - Get from [OpenAI platform](https://platform.openai.com/api-keys)
 
 ## Running Locally
 
